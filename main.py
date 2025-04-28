@@ -10,7 +10,7 @@ import torch
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mi_token_unico_12345")
 PHONE_ID     = "622356997632753"
 WHATSAPP_API = f"https://graph.facebook.com/v13.0/{PHONE_ID}/messages"
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "EAAJqQiKe1jgBOxZAJHc46wl2ZCiZCx0mPZCFPWz89jjuk9zBKWK12eDxLQ8zGNaSMwfjaK7ipgZC3AtNvkOyUKgcEFGCHeysHZCvIZBSqtPp78U52xikJzmXhaOai6jx8wPd694AWkGZCDgCJxvFh6uE4sWOlaEaidjhyyN72VfveiCZCKognQbTCmFfKZBO3ssdRi3t4LONZB25NvB2wztDoo2pZA34ZADRu")
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "EAAJqQiKe1jgBOZCsZAt2kb66NTV0Ppr3sKQ7iAAi5wAj2WGZC7lT7AnneyKZBFxygSC6SWlZAgIjnLkHZBePFgE5D6DrcSXGHTZCzVyoqgnC8I1EtQtYoqs2ELDeHDqf1foCAx38ctAXZAHRFImNIHaZAfLMNalZCKvMaRRze7UzgTwMd0ZBfUwdaW1")
 
 # Inicializar Firebase
 if not firebase_admin._apps:
