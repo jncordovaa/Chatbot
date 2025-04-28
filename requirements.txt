@@ -1,4 +1,6 @@
 flask
 transformers
 requests
+bitsandbytes
 firebase_admin
+torch

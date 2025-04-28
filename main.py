@@ -4,6 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import requests
 import unicodedata
 from flask import Flask, request
+import torch 
 
 # Firebase 
 if not firebase_admin._apps:
@@ -13,10 +14,16 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # Cargar el modelo desde Hugging Face
-model_name = "NadiaLiz/Llama-3.2"  
+model_name = "NadiaLiz/Llama-3.2"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
 
+# Detectar si hay GPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    device_map="auto",
+    torch_dtype=torch.float16  # Usa media precisión (menos memoria)
+).to(device)
 # WhatsApp Business API credentials
 WHATSAPP_API_URL = "https://graph.facebook.com/v13.0/1003671118634835/messages"
 ACCESS_TOKEN = "EAAJqQiKe1jgBO4ZAPuNwAwCnJElu5wJD8KslYnk8958mSyx9TDgw5wjd1Jz1N9dkl24o7ynoL7a82Ht1L8FUVA2NiS9iSCPHMovMEiYTR92SN9uubZAxQu9goMEFdZBQxmwQJWXoJSrSO58bcIXGxBHZAv84WWsYkePJB0k3P0XZC6soQot5ZCcEG6ZBe55qjZBxXnZBmOnXDO8gb6bU9MZBCpXcUbLukZD"
@@ -117,7 +124,7 @@ def whatsapp_mymessage():
                 f"Asistente:"
             )
 
-            inputs = tokenizer(prompt, return_tensors="pt")
+            inputs = tokenizer(prompt, return_tensors="pt").to(device)
             outputs = model.generate(**inputs, max_new_tokens=100, do_sample=True, temperature=0.7)
             respuesta_generada = tokenizer.decode(outputs[0], skip_special_tokens=True)
             respuesta = respuesta_generada.replace(prompt, "").strip()
