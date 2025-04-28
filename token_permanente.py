@@ -1,9 +1,9 @@
 import requests
 
 
-APP_ID = '679782234641976'
-APP_SECRET = '4d1d170528d183429615c89fe8bb3552'
-SHORT_LIVED_TOKEN = 'EAAJqQiKe1jgBO2yJsiZA0BIKMFR39nrPGFBX4I6FWugXwahTfCLc4nBatfyG5ailUqRylhK1qbPBKzvNwUAtqUZBPFyIfK67qyyPRZCyKweaFGmvStOd7LDdCV9ZA6UZAeI9w1bFKJOU7mLKZBbHWNDNWwD2CMpgyJNXEyIZARpdbQ9tnNVXaHZBifeZCeRTquw3du9hTQ0WDZCZBKQtXuXMRIMKlLw52EZD'
+APP_ID = ''
+APP_SECRET = ''
+SHORT_LIVED_TOKEN = ''
 
 url = f"https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id={APP_ID}&client_secret={APP_SECRET}&fb_exchange_token={SHORT_LIVED_TOKEN}"
 
