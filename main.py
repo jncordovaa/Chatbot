@@ -7,14 +7,18 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from flask import Flask, request
 import torch
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mi_token_unico_12345")
-PHONE_ID     = "622356997632753"
-WHATSAPP_API = f"https://graph.facebook.com/v13.0/{PHONE_ID}/messages"
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "EAAJqQiKe1jgBOZCsZAt2kb66NTV0Ppr3sKQ7iAAi5wAj2WGZC7lT7AnneyKZBFxygSC6SWlZAgIjnLkHZBePFgE5D6DrcSXGHTZCzVyoqgnC8I1EtQtYoqs2ELDeHDqf1foCAx38ctAXZAHRFImNIHaZAfLMNalZCKvMaRRze7UzgTwMd0ZBfUwdaW1")
+from fuzzywuzzy import fuzz
+from unidecode import unidecode
+import re
+import random
 
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mi_token_unico_12345")
+PHONE_ID     = "674027565786401"
+WHATSAPP_API = f"https://graph.facebook.com/v13.0/{PHONE_ID}/messages"
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "EAAbIBxQGVy0BO1i95YfXArjZCX9Jn8HchKLnxxV12CpnZBopUC59h02c2lBnL0nRib7VXWfeKmfKZBMNRvZCGk0wUE1J2BiHZCPnCsJAQVcKOCTW7y0SUGuCZB713yC092ZBsYHPZBKS3MkMms3yL0CfDBNbBNsTVymLsxAM1tzjGQZA0ZBnVrT2IXPjKyNz1b1zV09PmAMTZBIJeVd1DIfyhHBIbncAKNwBk1pZASxVI9Xt")
 # Inicializar Firebase
 if not firebase_admin._apps:
-    cred = credentials.Certificate("./ninatec-ecc00-firebase-adminsdk-fbsvc-5d1171c4a7 (1).json")
+    cred = credentials.Certificate("./saborysazon-55dcf-firebase-adminsdk-fbsvc-7ac822bdce.json")
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
@@ -28,33 +32,124 @@ model      = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.float16
 ).to(device)
 
-def normalizar(texto):
-    texto = texto.lower()
-    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    return texto
+# Normalizar texto (eliminar tildes y caracteres especiales)
+def normalizar_texto(texto):
+    texto = unidecode(texto.lower().strip())
+    return re.sub(r'[^\w\s]', '', texto)
 
-def extraer_producto(mensaje):
-    mensaje_norm = normalizar(mensaje)
-    productos_ref = db.collection("Productos").stream()
 
-    for doc in productos_ref:
-        nombre_producto = doc.to_dict().get("producto", "")
-        nombre_norm = normalizar(nombre_producto)
-        if nombre_norm in mensaje_norm:
-            return doc.id
+def obtener_carta():
+    try:
+        carta = db.collection('Carta').get()  # Cambiado a 'Carta'
+        # Convertir documentos a lista de diccionarios
+        items = [item.to_dict() for item in carta]
+        # Ordenar por categoria (alfabético) y luego por nombre (alfabético)
+        items_sorted = sorted(items, key=lambda x: (x['categoria'].lower(), x['nombre'].lower()))
+
+        contexto = "Menú del restaurante:\n"
+        for item in items_sorted:
+            contexto += f"- {item['nombre']} ({item['categoria']})\n"
+        return contexto
+    except Exception as e:
+        print(f"Error al obtener la carta: {e}")
+        #"Lo siento, no puedo mostrar la carta ahora. ¿Qué plato buscas?"
+        return "Menú del restaurante: No disponible temporalmente."
+
+# Extraer nombre del plato con coincidencia aproximada
+def extraer_plato(mensaje):
+    mensaje_normalizado = normalizar_texto(mensaje)
+    carta = db.collection('Carta').get()
+    nombres_platos = [(item.to_dict()['nombre'], normalizar_texto(item.to_dict()['nombre'])) for item in carta]
+
+    for nombre, nombre_normalizado in nombres_platos:
+        if fuzz.partial_ratio(nombre_normalizado, mensaje_normalizado) > 80:
+            return nombre
     return None
 
-def buscar_precio(producto):
-    ref = db.collection("Productos").document(producto)
-    doc = ref.get()
-
-    if doc.exists:
-        data = doc.to_dict()
-        producto = data.get("producto")
-        precio = data.get("precio")
-        return f"Claro, el {producto} cuesta S/{precio}."
-    else:
+# Buscar precio y detalles de un plato
+def buscar_precio(plato):
+    try:
+        carta = db.collection('Carta').get()
+        for item in carta:
+            item_data = item.to_dict()
+            if item_data['nombre'].lower() == plato.lower():
+                return (f"{item_data['nombre']} ({item_data['categoria']}): "
+                        f"{item_data['descripcion']}, Precio: S/{item_data['precio']}")
         return None
+    except Exception as e:
+        print(f"Error al buscar precio: {e}")
+        return None
+
+# Nueva función mejorada para obtener una recomendación
+def obtener_recomendacion(mensaje_normalizado):
+    try:
+        # Categorías válidas
+        categorias_validas = ["Plato de fondo", "Bebida", "Postre", "Sopa", "Ensalada"]
+
+        # Detectar categoría específica en el mensaje
+        categoria_seleccionada = None
+        for cat in categorias_validas:
+            if fuzz.partial_ratio(normalizar_texto(cat), mensaje_normalizado) > 80:
+                categoria_seleccionada = cat
+                break
+
+        # Si no se especifica categoría, recomendar un plato principal, bebida y postre
+        if not categoria_seleccionada:
+            recomendacion = "Te recomiendo una comida completa:\n"
+            for cat in ["Plato de fondo", "Bebida", "Postre"]:
+                carta = db.collection('Carta').where('categoria', '==', cat).get()
+                if carta:
+                    item = random.choice(carta).to_dict()
+                    recomendacion += f"- {item['nombre']} ({cat}): {item['descripcion']}, Precio: S/{item['precio']}\n"
+                else:
+                    recomendacion += f"- No hay {cat.lower()}s disponibles.\n"
+            return recomendacion.strip()
+
+        # Si se especifica categoría, recomendar solo un ítem de esa categoría
+        carta = db.collection('Carta').where('categoria', '==', categoria_seleccionada).get()
+        if carta:
+            item = random.choice(carta).to_dict()
+            return f"Te recomiendo {item['nombre']}: {item['descripcion']}, por solo S/{item['precio']}."
+        else:
+            return f"No tengo {categoria_seleccionada}s para recomendar. ¿Quieres otra categoría?"
+    except Exception as e:
+        print(f"Error al recomendar: {e}")
+        return "Lo siento, no puedo recomendar ahora. ¿Qué te gustaría?"
+
+# Obtener contexto desde Firebase, ordenado por categoria y nombre
+def obtener_contexto():
+    try:
+        carta = db.collection('carta').get()
+        contexto = "Menú del restaurante:\n"
+        for item in carta:
+            item_data = item.to_dict()
+            contexto += f"- {item_data['nombre']} ({item_data['categoria']}): {item_data['descripcion']}, Precio: ${item_data['precio']}\n"
+        return contexto
+    except Exception as e:
+        print(f"Error al obtener contexto: {e}")
+        return "Menú del restaurante: No disponible temporalmente."
+
+# Generar respuesta con el modelo
+def generar_respuesta(mensaje, contexto):
+    prompt = (
+        f"{contexto}\n\n"
+        f"Eres un asistente de Sabor y Sazón (un restaurante de comid peruana) que ayuda con el menú. "
+        f"Responde de forma amable, precisa y breve, usando la información del menú. "
+        f"Si no entiendes, pide aclaraciones.\n\n"
+        f"Usuario: {mensaje}\n"
+        f"Asistente:"
+    )
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=100,
+        do_sample=True,
+        temperature=0.7,
+        top_p=0.9,
+        pad_token_id=tokenizer.eos_token_id
+    )
+    respuesta = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return respuesta.replace(prompt, "").strip()
 
 def send_whatsapp_message(to: str, body: str) -> dict:
     headers = {
@@ -72,15 +167,10 @@ def send_whatsapp_message(to: str, body: str) -> dict:
     except ValueError:
         return {"error": resp.text}
 
-def obtener_contexto():
-    return (
-        "Eres un asistente virtual de Ninatec, una empresa especializada en "
-        "tecnología y automatización. Responde siempre de manera amable, clara y profesional."
-    )
-
 # ———————— FLASK APP ————————
 app = Flask(__name__)
 
+# Ruta principal para WhatsApp
 @app.route("/whatsapp", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -101,20 +191,45 @@ def webhook():
         return "OK", 200  # ignorar otros eventos
 
     print("Mensaje recibido:", incoming_msg)
+    incoming_msg_normalizado = normalizar_texto(incoming_msg)
 
-    texto = incoming_msg.lower()
-    if "precio" in texto or "cuánto cuesta" in texto:
-        pid = extraer_producto(incoming_msg)
-        if pid:
-            respuesta = buscar_precio(pid)
+    # Obtener contexto
+    contexto = obtener_contexto()
+
+    # Lista de variaciones para cada intención
+    precio_keywords = ["precio", "presio", "precios", "cuanto", "cuanto cuesta", "cuesta", "valor", "costo"]
+    carta_keywords = ["carta", "karta", "menu", "menú", "menus"]
+    recomendacion_keywords = ["recomendacion", "recomendación", "recomendaciones", "recomendar", "rekomendar", "sugerencia", "sugerir"]
+
+    # Detectar intenciones con coincidencia aproximada
+    es_pregunta_precio = any(fuzz.partial_ratio(kw, incoming_msg_normalizado) > 80 for kw in precio_keywords)
+    es_pregunta_carta = any(fuzz.partial_ratio(kw, incoming_msg_normalizado) > 80 for kw in carta_keywords)
+    es_pregunta_recomendacion = any(fuzz.partial_ratio(kw, incoming_msg_normalizado) > 80 for kw in recomendacion_keywords)
+
+    # Manejar casos específicos
+    if "hola" in incoming_msg_normalizado:
+        respuesta = ("¡Hola! Bienvenido al restaurante Sabor y Sazón. ¿Quieres ver la carta, saber el precio de un plato, "
+                     "o necesitas una recomendación?")
+
+    elif es_pregunta_carta:
+        respuesta = obtener_carta()
+
+    elif es_pregunta_recomendacion:
+        respuesta = obtener_recomendacion(incoming_msg_normalizado)
+
+    elif es_pregunta_precio:
+        plato = extraer_plato(incoming_msg)
+        if plato:
+            respuesta = buscar_precio(plato)
+            if not respuesta:
+                respuesta = f"Lo siento, no encontré detalles para '{plato}'."
         else:
-            respuesta = "¿De qué producto deseas saber el precio? Por favor escribe el nombre exacto."
+            respuesta = "¿De qué plato deseas saber el precio?"
+
     else:
-        prompt = f"{obtener_contexto()}\nUsuario: {incoming_msg}\nAsistente:"
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        out    = model.generate(**inputs, max_new_tokens=100, do_sample=True, temperature=0.7)
-        gen    = tokenizer.decode(out[0], skip_special_tokens=True)
-        respuesta = gen.replace(prompt, "").strip()
+        respuesta = generar_respuesta(incoming_msg, contexto)
+        if not respuesta or len(respuesta) < 10:
+            respuesta = "No entendí tu mensaje. ¿Puedes especificar si quieres la carta, un precio, o una recomendación?"
 
     print("Respuesta generada:", respuesta)
 
