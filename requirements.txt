@@ -7,5 +7,5 @@ torch
 fuzzywuzzy
 unidecode
 python-Levenshtein
-
+requests
 
